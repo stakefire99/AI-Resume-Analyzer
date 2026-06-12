@@ -65,6 +65,10 @@ streamlit run app.py
 
 The app will open at `http://localhost:8501` in your browser.
 
+
+### 5. Live Demo
+
+Click here:- "[https://ai-resume-analyzer-l4jf3yefxf3wbp6msxq43o.streamlit.app/](url)"
 ---
 
 ## 🔑 OpenAI API Key (Optional)
