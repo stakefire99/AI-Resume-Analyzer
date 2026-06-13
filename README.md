@@ -74,7 +74,7 @@ Click here:- "[https://ai-resume-analyzer-l4jf3yefxf3wbp6msxq43o.streamlit.app/]
 ## 🔑 OpenAI API Key (Optional)
 
 AI Feedback is optional. Without it, the app still gives you:
-- Full ATS score and breakdown
+- Full ATS score and breakdown 
 - Matched/missing skills
 - Rule-based action plan
 - Resume headline suggestion
