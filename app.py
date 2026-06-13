@@ -14,6 +14,7 @@ from analyzer import (
     generate_suggestions, generate_resume_headline, score_label
 )
 from ai_feedback import get_ai_feedback, is_api_key_valid
+from keyword_analyzer import keyword_match_analysis, visibility_analysis, ats_format_check
 
 # ─────────────────────────────────────────────
 # PAGE CONFIG
@@ -491,6 +492,16 @@ if analyze_btn:
                 matched_lower = {s.lower() for s in matched}
                 extra = [s for s in resume_skills if s.lower() not in matched_lower][:15]
 
+                # Keyword match analysis
+                keyword_result = keyword_match_analysis(resume_text, jd_text)
+
+                # Recruiter visibility/standout analysis
+                visibility_result = visibility_analysis(resume_text)
+
+                # ATS format compliance
+                file_ext = "." + uploaded_file.name.split(".")[-1]
+                format_result = ats_format_check(resume_text, file_ext)
+
                 # Step 4: Suggestions
                 suggestions = generate_suggestions(resume_text, jd_text, missing, score)
 
@@ -519,7 +530,10 @@ if analyze_btn:
                     "suggestions": suggestions,
                     "headline": headline,
                     "ai_result": ai_result,
-                    "filename": uploaded_file.name
+                    "filename": uploaded_file.name,
+                    "keyword_result": keyword_result,
+                    "visibility_result": visibility_result,
+                    "format_result": format_result
                 }
                 st.session_state.analysis_done = True
                 st.rerun()
@@ -589,12 +603,52 @@ if st.session_state.analysis_done and st.session_state.results:
         </div>
         """, unsafe_allow_html=True)
 
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── SUMMARY ROW: ATS Match, Keyword Match, Recruiter Visibility ──
+    kw = r["keyword_result"]
+    vis = r["visibility_result"]
+
+    sum_c1, sum_c2, sum_c3 = st.columns(3)
+
+    with sum_c1:
+        s_label, s_color = score_label(score)
+        st.markdown(f"""
+        <div class='metric-card' style='border-color:{s_color}33;'>
+            <div style='font-size:13px; color:#8892a4; font-family:DM Mono,monospace; margin-bottom:6px;'>🎯 ATS SKILL MATCH</div>
+            <div style='font-size:36px; font-weight:800; font-family:Syne,sans-serif; color:{s_color};'>{score}%</div>
+            <div style='font-size:12px; color:#8892a4; margin-top:4px;'>{s_label}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with sum_c2:
+        k_label, k_color = score_label(kw["score"])
+        st.markdown(f"""
+        <div class='metric-card' style='border-color:{k_color}33;'>
+            <div style='font-size:13px; color:#8892a4; font-family:DM Mono,monospace; margin-bottom:6px;'>🔑 KEYWORD MATCH</div>
+            <div style='font-size:36px; font-weight:800; font-family:Syne,sans-serif; color:{k_color};'>{kw['score']}%</div>
+            <div style='font-size:12px; color:#8892a4; margin-top:4px;'>{k_label}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with sum_c3:
+        v_label, v_color = score_label(vis["score"])
+        st.markdown(f"""
+        <div class='metric-card' style='border-color:{v_color}33;'>
+            <div style='font-size:13px; color:#8892a4; font-family:DM Mono,monospace; margin-bottom:6px;'>👀 RECRUITER VISIBILITY</div>
+            <div style='font-size:36px; font-weight:800; font-family:Syne,sans-serif; color:{v_color};'>{vis['score']}%</div>
+            <div style='font-size:12px; color:#8892a4; margin-top:4px;'>{v_label}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
     st.divider()
 
     # ── TABS ──
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📊 Skills Analysis",
-        "🎯 Action Plan",
+        "🔑 Keyword Match",
+        "👀 Recruiter Visibility",
+        "✅ ATS Format",
         "🤖 AI Feedback",
         "📄 Raw Text"
     ])
@@ -631,13 +685,87 @@ if st.session_state.analysis_done and st.session_state.results:
                 if fig:
                     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    # ─── TAB 2: Action Plan ───
+    # ─── TAB 2: Keyword Match ───
     with tab2:
+        kw = r["keyword_result"]
+        st.markdown(f"""
+        <div class='verdict-box'>
+            <div class='section-label' style='margin-bottom:6px;'>Keyword Match Score</div>
+            <div style='font-size:32px; font-weight:800; font-family:Syne,sans-serif; color:{"#00e5a0" if kw["score"]>=65 else "#FFC107" if kw["score"]>=40 else "#F44336"};'>
+                {kw['score']}%
+            </div>
+            <div style='font-size:13px; color:#8892a4; margin-top:4px;'>
+                {len(kw['matched'])} of {kw['total_jd_keywords']} key terms from the JD appear in your resume
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_l, col_r = st.columns(2)
+        with col_l:
+            st.markdown('<div class="section-label">✓ Matched Keywords</div>', unsafe_allow_html=True)
+            st.markdown(skills_html(kw["matched"][:25], "matched"), unsafe_allow_html=True)
+        with col_r:
+            st.markdown('<div class="section-label">✗ Missing Keywords (consider adding)</div>', unsafe_allow_html=True)
+            st.markdown(skills_html(kw["missing"][:25], "missing"), unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.info("💡 These are exact words/phrases from the job description. Mirroring this language in your resume — naturally — helps both ATS keyword scanners and human recruiters see the fit.")
+
+    # ─── TAB 3: Recruiter Visibility ───
+    with tab3:
+        vis = r["visibility_result"]
+        v_label, v_color = score_label(vis["score"])
+        st.markdown(f"""
+        <div class='verdict-box'>
+            <div class='section-label' style='margin-bottom:6px;'>Recruiter Visibility Score</div>
+            <div style='font-size:32px; font-weight:800; font-family:Syne,sans-serif; color:{v_color};'>
+                {vis['score']}% — {v_label}
+            </div>
+            <div style='font-size:13px; color:#8892a4; margin-top:4px;'>
+                Does your resume stand out in a recruiter's 6-second scan?
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        for check in vis["checks"]:
+            icon = "✅" if check["pass"] is True else "⚠️" if check["pass"] == "partial" else "❌"
+            with st.expander(f"{icon} {check['label']}"):
+                st.markdown(check["detail"])
+
+    # ─── TAB 4: ATS Format ───
+    with tab4:
+        fmt = r["format_result"]
+        f_label, f_color = score_label(fmt["score"])
+        st.markdown(f"""
+        <div class='verdict-box'>
+            <div class='section-label' style='margin-bottom:6px;'>ATS Format Compliance</div>
+            <div style='font-size:32px; font-weight:800; font-family:Syne,sans-serif; color:{f_color};'>
+                {fmt['score']}% — {f_label}
+            </div>
+            <div style='font-size:13px; color:#8892a4; margin-top:4px;'>
+                Will ATS software be able to correctly parse your resume?
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        for check in fmt["checks"]:
+            icon = "✅" if check["pass"] is True else "⚠️" if check["pass"] == "partial" else "❌"
+            with st.expander(f"{icon} {check['label']}"):
+                st.markdown(check["detail"])
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.warning("⚠️ Note: This check works on extracted text. Heavy use of tables, text boxes, columns, or images in your resume file can still break ATS parsing even if this score looks good — when in doubt, use a simple single-column layout.")
+
+    # ─── TAB 5: AI Feedback + Action Plan ───
+    with tab5:
         st.markdown(f"""
         <div class='verdict-box'>
             <div class='section-label' style='margin-bottom:6px;'>Overall Assessment</div>
             <div style='font-size:15px; color:#c8ccd8; line-height:1.6;'>
-            Your resume has a <strong style='color:{color};'>{score}% ATS match</strong> — {label.lower()}.
+            Your resume has a <strong style='color:{color};'>{score}% ATS skill match</strong> — {label.lower()}.
             {"Great position to apply!" if score >= 65 else "Focus on the action plan below to improve your chances."}
             </div>
         </div>
@@ -650,8 +778,9 @@ if st.session_state.analysis_done and st.session_state.results:
             with st.expander(f"{sug['icon']} {sug['title']}"):
                 st.markdown(sug["detail"])
 
-    # ─── TAB 3: AI Feedback ───
-    with tab3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.divider()
+
         ai = r.get("ai_result")
         if not ai:
             st.markdown("""
@@ -727,8 +856,8 @@ if st.session_state.analysis_done and st.session_state.results:
                         </div>
                         """, unsafe_allow_html=True)
 
-    # ─── TAB 4: Raw Text ───
-    with tab4:
+    # ─── TAB 6: Raw Text ───
+    with tab6:
         col_l, col_r = st.columns(2)
         with col_l:
             st.markdown('<div class="section-label">Extracted Resume Text</div>', unsafe_allow_html=True)
